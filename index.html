@@ -1,0 +1,492 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Noise Texture Generator — LaunchTower</title>
+<style>
+  :root {
+    --bg: #0f1115;
+    --panel: #171a21;
+    --panel2: #1d212b;
+    --border: #2a2f3a;
+    --text: #e6e9ef;
+    --muted: #8b93a3;
+    --accent: #5eead4;
+    --accent2: #38bdf8;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    line-height: 1.5;
+  }
+  .wrap { max-width: 1080px; margin: 0 auto; padding: 24px 16px 48px; }
+  header h1 { font-size: 1.5rem; margin: 0 0 4px; }
+  header p { color: var(--muted); margin: 0 0 20px; font-size: 0.95rem; }
+  .grid { display: grid; grid-template-columns: 300px 1fr; gap: 16px; align-items: start; }
+  @media (max-width: 800px) { .grid { grid-template-columns: 1fr; } }
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px;
+  }
+  .panel h2 { font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); margin: 0 0 12px; }
+  .row { margin-bottom: 14px; }
+  .row label { display: block; font-size: 0.85rem; color: var(--muted); margin-bottom: 6px; }
+  .row .val { color: var(--accent); font-weight: 600; }
+  input[type=range] { width: 100%; accent-color: var(--accent); }
+  select, input[type=number], input[type=color] {
+    width: 100%;
+    background: var(--panel2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    border-radius: 6px;
+    padding: 8px 10px;
+    font-size: 0.9rem;
+  }
+  input[type=color] { padding: 2px; height: 38px; cursor: pointer; }
+  .toggle { display: flex; align-items: center; gap: 8px; cursor: pointer; user-select: none; }
+  .toggle input { width: 18px; height: 18px; accent-color: var(--accent); }
+  .toggle span { font-size: 0.9rem; }
+  .btn {
+    display: inline-block;
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    color: #0b0d10;
+    font-weight: 700;
+    border: none;
+    border-radius: 8px;
+    padding: 10px 16px;
+    font-size: 0.9rem;
+    cursor: pointer;
+    width: 100%;
+  }
+  .btn:hover { filter: brightness(1.1); }
+  .btn.ghost {
+    background: var(--panel2);
+    color: var(--text);
+    border: 1px solid var(--border);
+    font-weight: 500;
+  }
+  .preview-box {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px;
+    min-height: 320px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+  }
+  .canvas-holder {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: repeating-conic-gradient(#1a1e26 0% 25%, #14171d 0% 50%) 50% / 20px 20px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px;
+    max-width: 100%;
+  }
+  canvas { image-rendering: pixelated; image-rendering: crisp-edges; display: block; max-width: 100%; height: auto; }
+  .meta { color: var(--muted); font-size: 0.85rem; }
+  .actions { display: flex; gap: 10px; width: 100%; }
+  .actions .btn { flex: 1; }
+  footer { margin-top: 32px; text-align: center; color: var(--muted); font-size: 0.85rem; }
+  footer a { color: var(--accent); text-decoration: none; }
+  footer a:hover { text-decoration: underline; }
+  .hint { font-size: 0.78rem; color: var(--muted); margin-top: 4px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Noise Texture Generator</h1>
+    <p>Seeded value / Perlin-style noise for pixel art and game textures. Tileable, quantizable, PNG export. All in your browser.</p>
+  </header>
+
+  <div class="grid">
+    <div class="panel">
+      <h2>Settings</h2>
+
+      <div class="row">
+        <label>Size: <span class="val" id="sizeVal">64</span> px</label>
+        <input type="range" id="size" min="16" max="256" step="16" value="64">
+      </div>
+
+      <div class="row">
+        <label>Seed: <span class="val" id="seedVal">1337</span></label>
+        <input type="number" id="seed" min="0" max="999999" value="1337">
+        <div class="hint">Same seed + settings = same texture.</div>
+      </div>
+
+      <div class="row">
+        <label>Algorithm</label>
+        <select id="algo">
+          <option value="value">Value noise (smooth)</option>
+          <option value="perlin">Perlin-style (gradient)</option>
+          <option value="cellular">Cellular / Worley-ish</option>
+        </select>
+      </div>
+
+      <div class="row">
+        <label>Octaves: <span class="val" id="octVal">3</span></label>
+        <input type="range" id="octaves" min="1" max="6" step="1" value="3">
+      </div>
+
+      <div class="row">
+        <label>Frequency: <span class="val" id="freqVal">4.0</span></label>
+        <input type="range" id="freq" min="1" max="16" step="0.5" value="4">
+      </div>
+
+      <div class="row">
+        <label>Persistence: <span class="val" id="persVal">0.50</span></label>
+        <input type="range" id="pers" min="0.1" max="1" step="0.05" value="0.5">
+      </div>
+
+      <div class="row">
+        <label>Contrast: <span class="val" id="conVal">1.0</span></label>
+        <input type="range" id="con" min="0.2" max="3" step="0.1" value="1">
+      </div>
+
+      <div class="row">
+        <label class="toggle">
+          <input type="checkbox" id="tileable" checked>
+          <span>Tileable (seamless wrap)</span>
+        </label>
+      </div>
+
+      <div class="row">
+        <label class="toggle">
+          <input type="checkbox" id="quantize" checked>
+          <span>2-color quantize (pixel art)</span>
+        </label>
+      </div>
+
+      <div class="row" id="quantRow">
+        <label>Color A (low)</label>
+        <input type="color" id="colorA" value="#1a1a2e">
+      </div>
+
+      <div class="row" id="quantRow2">
+        <label>Color B (high)</label>
+        <input type="color" id="colorB" value="#e0e0ff">
+      </div>
+
+      <div class="row">
+        <label>Zoom preview</label>
+        <select id="zoom">
+          <option value="1">1x</option>
+          <option value="2">2x</option>
+          <option value="4" selected>4x</option>
+          <option value="8">8x</option>
+          <option value="16">16x</option>
+        </select>
+      </div>
+
+      <div class="row">
+        <button class="btn ghost" id="regen">🎲 Randomize seed</button>
+      </div>
+    </div>
+
+    <div class="preview-box">
+      <div class="canvas-holder">
+        <canvas id="canvas"></canvas>
+      </div>
+      <div class="meta" id="meta">64 × 64 px · seed 1337 · 3 octaves</div>
+      <div class="actions">
+        <button class="btn" id="download">⬇ Download PNG</button>
+      </div>
+    </div>
+  </div>
+
+  <footer>
+    Part of the <a href="https://pennypenguinapp-beep.github.io/" target="_blank" rel="noopener">LaunchTower</a> free tools for pixel artists &amp; game devs.
+  </footer>
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  // ---------- mulberry32 PRNG (seeded) ----------
+  function mulberry32(a) {
+    return function () {
+      a |= 0; a = (a + 0x6D2B79F5) | 0;
+      let t = Math.imul(a ^ (a >>> 15), 1 | a);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+
+  // ---------- hash-based 2D value noise (tileable via lattice wrap) ----------
+  function makeValueNoise(seed, period) {
+    const rand = mulberry32(seed);
+    // pre-generate a lattice of random values for one period
+    const grid = new Float32Array(period * period);
+    for (let i = 0; i < grid.length; i++) grid[i] = rand();
+    function lattice(ix, iy) {
+      const x = ((ix % period) + period) % period;
+      const y = ((iy % period) + period) % period;
+      return grid[y * period + x];
+    }
+    function smooth(t) { return t * t * (3 - 2 * t); }
+    return function (x, y) {
+      const ix = Math.floor(x), iy = Math.floor(y);
+      const fx = smooth(x - ix), fy = smooth(y - iy);
+      const v00 = lattice(ix, iy), v10 = lattice(ix + 1, iy);
+      const v01 = lattice(ix, iy + 1), v11 = lattice(ix + 1, iy + 1);
+      const a = v00 + (v10 - v00) * fx;
+      const b = v01 + (v11 - v01) * fx;
+      return a + (b - a) * fy;
+    };
+  }
+
+  // ---------- Perlin-style gradient noise (tileable lattice) ----------
+  function makePerlinNoise(seed, period) {
+    const rand = mulberry32(seed);
+    const grads = new Float32Array(period * period * 2);
+    for (let i = 0; i < period * period; i++) {
+      const ang = rand() * Math.PI * 2;
+      grads[i * 2] = Math.cos(ang);
+      grads[i * 2 + 1] = Math.sin(ang);
+    }
+    function grad(ix, iy, dx, dy) {
+      const x = ((ix % period) + period) % period;
+      const y = ((iy % period) + period) % period;
+      const i = (y * period + x) * 2;
+      return grads[i] * dx + grads[i + 1] * dy;
+    }
+    function fade(t) { return t * t * t * (t * (t * 6 - 15) + 10); }
+    return function (x, y) {
+      const ix = Math.floor(x), iy = Math.floor(y);
+      const fx = x - ix, fy = y - iy;
+      const u = fade(fx), v = fade(fy);
+      const n00 = grad(ix, iy, fx, fy);
+      const n10 = grad(ix + 1, iy, fx - 1, fy);
+      const n01 = grad(ix, iy + 1, fx, fy - 1);
+      const n11 = grad(ix + 1, iy + 1, fx - 1, fy - 1);
+      const a = n00 + (n10 - n00) * u;
+      const b = n01 + (n11 - n01) * u;
+      return a + (b - a) * v; // roughly in [-1, 1]
+    };
+  }
+
+  // ---------- Worley / cellular-ish noise (tileable) ----------
+  function makeCellularNoise(seed, period) {
+    const rand = mulberry32(seed);
+    const N = period; // feature points per period
+    const pts = [];
+    for (let i = 0; i < N * N; i++) {
+      pts.push([rand(), rand()]);
+    }
+    return function (x, y) {
+      let minD = Infinity;
+      // check 3x3 neighbor cells for wrap
+      const cx = Math.floor(x), cy = Math.floor(y);
+      for (let ox = -1; ox <= 1; ox++) {
+        for (let oy = -1; oy <= 1; oy++) {
+          const cellX = cx + ox, cellY = cy + oy;
+          // points in this cell (with wrap)
+          const baseX = ((cellX % N) + N) % N;
+          const baseY = ((cellY % N) + N) % N;
+          for (let i = 0; i < pts.length; i++) {
+            const px = baseX + pts[i][0];
+            const py = baseY + pts[i][1];
+            const dx = px - x, dy = py - y;
+            const d = dx * dx + dy * dy;
+            if (d < minD) minD = d;
+          }
+        }
+      }
+      const d = Math.sqrt(minD);
+      return 1 - Math.min(1, d * 2); // 0..1
+    };
+  }
+
+  // ---------- fBm (fractal Brownian motion) ----------
+  function fbm(noise, x, y, octaves, persistence) {
+    let amp = 1, freq = 1, sum = 0, norm = 0;
+    for (let o = 0; o < octaves; o++) {
+      sum += amp * noise(x * freq, y * freq);
+      norm += amp;
+      amp *= persistence;
+      freq *= 2;
+    }
+    return sum / norm;
+  }
+
+  // ---------- color helpers ----------
+  function hexToRgb(hex) {
+    const h = hex.replace("#", "");
+    return [
+      parseInt(h.substring(0, 2), 16),
+      parseInt(h.substring(2, 4), 16),
+      parseInt(h.substring(4, 6), 16)
+    ];
+  }
+
+  // ---------- state ----------
+  const canvas = document.getElementById("canvas");
+  const ctx = canvas.getContext("2d");
+
+  const els = {
+    size: document.getElementById("size"),
+    seed: document.getElementById("seed"),
+    algo: document.getElementById("algo"),
+    octaves: document.getElementById("octaves"),
+    freq: document.getElementById("freq"),
+    pers: document.getElementById("pers"),
+    con: document.getElementById("con"),
+    tileable: document.getElementById("tileable"),
+    quantize: document.getElementById("quantize"),
+    colorA: document.getElementById("colorA"),
+    colorB: document.getElementById("colorB"),
+    zoom: document.getElementById("zoom"),
+    regen: document.getElementById("regen"),
+    download: document.getElementById("download"),
+    meta: document.getElementById("meta"),
+    quantRow: document.getElementById("quantRow"),
+    quantRow2: document.getElementById("quantRow2")
+  };
+
+  const labels = {
+    sizeVal: document.getElementById("sizeVal"),
+    seedVal: document.getElementById("seedVal"),
+    octVal: document.getElementById("octVal"),
+    freqVal: document.getElementById("freqVal"),
+    persVal: document.getElementById("persVal"),
+    conVal: document.getElementById("conVal")
+  };
+
+  function updateLabels() {
+    labels.sizeVal.textContent = els.size.value;
+    labels.seedVal.textContent = els.seed.value;
+    labels.octVal.textContent = els.octaves.value;
+    labels.freqVal.textContent = Number(els.freq.value).toFixed(1);
+    labels.persVal.textContent = Number(els.pers.value).toFixed(2);
+    labels.conVal.textContent = Number(els.con.value).toFixed(1);
+    els.quantRow.style.display = els.quantize.checked ? "" : "none";
+    els.quantRow2.style.display = els.quantize.checked ? "" : "none";
+  }
+
+  function render() {
+    const size = parseInt(els.size.value, 10);
+    const seed = parseInt(els.seed.value, 10) || 0;
+    const algo = els.algo.value;
+    const octaves = parseInt(els.octaves.value, 10);
+    const baseFreq = parseFloat(els.freq.value);
+    const persistence = parseFloat(els.pers.value);
+    const contrast = parseFloat(els.con.value);
+    const tileable = els.tileable.checked;
+    const quantize = els.quantize.checked;
+    const colorA = hexToRgb(els.colorA.value);
+    const colorB = hexToRgb(els.colorB.value);
+    const zoom = parseInt(els.zoom.value, 10);
+
+    // period for lattice wrap: use baseFreq so the pattern tiles exactly
+    const period = Math.max(2, Math.round(baseFreq));
+
+    let noiseFn;
+    if (algo === "value") noiseFn = makeValueNoise(seed, period);
+    else if (algo === "perlin") noiseFn = makePerlinNoise(seed, period);
+    else noiseFn = makeCellularNoise(seed, period);
+
+    // work in a small offscreen buffer at native size
+    const buf = ctx.createImageData(size, size);
+    const data = buf.data;
+
+    let minV = Infinity, maxV = -Infinity;
+    const values = new Float32Array(size * size);
+    for (let y = 0; y < size; y++) {
+      for (let x = 0; x < size; x++) {
+        const nx = (x / size) * baseFreq;
+        const ny = (y / size) * baseFreq;
+        let v;
+        if (algo === "perlin") {
+          v = fbm(noiseFn, nx, ny, octaves, persistence);
+          v = (v + 1) / 2; // map [-1,1] -> [0,1]
+        } else {
+          v = fbm(noiseFn, nx, ny, octaves, persistence);
+        }
+        values[y * size + x] = v;
+        if (v < minV) minV = v;
+        if (v > maxV) maxV = v;
+      }
+    }
+    const range = (maxV - minV) || 1;
+
+    for (let i = 0; i < size * size; i++) {
+      let v = (values[i] - minV) / range; // 0..1
+      // contrast around 0.5
+      v = 0.5 + (v - 0.5) * contrast;
+      v = Math.max(0, Math.min(1, v));
+
+      let r, g, b;
+      if (quantize) {
+        // hard 2-color: threshold at 0.5
+        const c = v >= 0.5 ? colorB : colorA;
+        r = c[0]; g = c[1]; b = c[2];
+      } else {
+        // grayscale ramp
+        r = g = b = Math.round(v * 255);
+      }
+      data[i * 4] = r;
+      data[i * 4 + 1] = g;
+      data[i * 4 + 2] = b;
+      data[i * 4 + 3] = 255;
+    }
+
+    // draw to canvas at zoom scale with pixelated rendering
+    canvas.width = size;
+    canvas.height = size;
+    ctx.putImageData(buf, 0, 0);
+    canvas.style.width = (size * zoom) + "px";
+    canvas.style.height = (size * zoom) + "px";
+
+    els.meta.textContent = size + " × " + size + " px · seed " + seed +
+      " · " + octaves + " octaves · " + (quantize ? "2-color" : "grayscale") +
+      (tileable ? " · tileable" : "");
+  }
+
+  function download() {
+    const size = parseInt(els.size.value, 10);
+    // render at native size into a temp canvas for a clean export
+    const tmp = document.createElement("canvas");
+    tmp.width = size; tmp.height = size;
+    const tctx = tmp.getContext("2d");
+    tctx.drawImage(canvas, 0, 0, size, size);
+    const a = document.createElement("a");
+    a.download = "noise-texture-" + els.seed.value + "-" + size + "px.png";
+    a.href = tmp.toDataURL("image/png");
+    a.click();
+  }
+
+  // wire up events
+  const inputs = [els.size, els.seed, els.algo, els.octaves, els.freq, els.pers, els.con,
+    els.tileable, els.quantize, els.colorA, els.colorB, els.zoom];
+  inputs.forEach(el => {
+    el.addEventListener("input", () => { updateLabels(); render(); });
+    el.addEventListener("change", () => { updateLabels(); render(); });
+  });
+
+  els.regen.addEventListener("click", () => {
+    els.seed.value = Math.floor(Math.random() * 1000000);
+    updateLabels();
+    render();
+  });
+
+  els.download.addEventListener("click", download);
+
+  // init
+  updateLabels();
+  render();
+})();
+</script>
+</body>
+</html>
